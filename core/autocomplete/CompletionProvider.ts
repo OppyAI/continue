@@ -8,7 +8,6 @@ import { ContextRetrievalService } from "./context/ContextRetrievalService.js";
 
 import { BracketMatchingService } from "./filtering/BracketMatchingService.js";
 import { CompletionStreamer } from "./generation/CompletionStreamer.js";
-import { postprocessCompletion } from "./postprocessing/index.js";
 import { shouldPrefilter } from "./prefiltering/index.js";
 import { getAllSnippets } from "./snippets/index.js";
 import { renderPrompt } from "./templating/index.js";
@@ -216,16 +215,16 @@ export class CompletionProvider {
           return undefined;
         }
 
-        const processedCompletion = helper.options.transform
-          ? postprocessCompletion({
-              completion,
-              prefix: helper.prunedPrefix,
-              suffix: helper.prunedSuffix,
-              llm,
-            })
-          : completion;
+        // const processedCompletion = helper.options.transform
+        //   ? postprocessCompletion({
+        //       completion,
+        //       prefix: helper.prunedPrefix,
+        //       suffix: helper.prunedSuffix,
+        //       llm,
+        //     })
+        //   : completion;
 
-        completion = processedCompletion;
+        // completion = processedCompletion;
       }
 
       if (!completion) {

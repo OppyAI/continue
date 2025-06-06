@@ -1,21 +1,4 @@
-import { streamLines } from "../../../diff/util";
 import { HelperVars } from "../../util/HelperVars";
-
-import { stopAtStartOf, stopAtStopTokens } from "./charStream";
-import {
-  avoidEmptyComments,
-  avoidPathLine,
-  noDoubleNewLine,
-  showWhateverWeHaveAtXMs,
-  skipPrefixes,
-  stopAtLines,
-  stopAtLinesExact,
-  stopAtRepeatingLines,
-  stopAtSimilarLine,
-  streamWithNewLines,
-} from "./lineStream";
-
-const STOP_AT_PATTERNS = ["diff --git"];
 
 export class StreamTransformPipeline {
   async *transform(
@@ -23,78 +6,48 @@ export class StreamTransformPipeline {
     prefix: string,
     suffix: string,
     multiline: boolean,
-    stopTokens: string[],
+    _stopTokens: string[], // Now ignored
     fullStop: () => void,
     helper: HelperVars,
   ): AsyncGenerator<string> {
-    let charGenerator = generator;
+    let lineCount = 0;
+    let buffer = "";
+    let stopped = false;
 
-    charGenerator = stopAtStopTokens(generator, [
-      ...stopTokens,
-      ...STOP_AT_PATTERNS,
-    ]);
-    charGenerator = stopAtStartOf(charGenerator, suffix);
-    for (const charFilter of helper.lang.charFilters ?? []) {
-      charGenerator = charFilter({
-        chars: charGenerator,
-        prefix,
-        suffix,
-        filepath: helper.filepath,
-        multiline,
-      });
+    for await (const update of generator) {
+      if (stopped) {
+        break;
+      }
+      
+      buffer += update;
+      
+      // Process complete lines
+      const lines = buffer.split("\n");
+      // Keep the last incomplete line in buffer
+      buffer = lines.pop() ?? "";
+      
+      // Yield complete lines and count them
+      for (const line of lines) {
+        if (stopped) {
+          break;
+        }
+        
+        const lineWithNewline = line + "\n";
+        yield lineWithNewline;
+        lineCount++;
+        
+        // Stop after 5 complete lines
+        if (lineCount >= 5) {
+          stopped = true;
+          fullStop();
+          break;
+        }
+      }
     }
-
-    let lineGenerator = streamLines(charGenerator);
-
-    lineGenerator = stopAtLines(lineGenerator, fullStop);
-    const lineBelowCursor = this.getLineBelowCursor(helper);
-    if (lineBelowCursor.trim() !== "") {
-      lineGenerator = stopAtLinesExact(lineGenerator, fullStop, [
-        lineBelowCursor,
-      ]);
+    
+    // Don't yield remaining buffer if we stopped due to line limit
+    if (!stopped && buffer.length > 0) {
+      yield buffer;
     }
-    lineGenerator = stopAtRepeatingLines(lineGenerator, fullStop);
-    lineGenerator = avoidEmptyComments(
-      lineGenerator,
-      helper.lang.singleLineComment,
-    );
-    lineGenerator = avoidPathLine(lineGenerator, helper.lang.singleLineComment);
-    lineGenerator = skipPrefixes(lineGenerator);
-    lineGenerator = noDoubleNewLine(lineGenerator);
-
-    for (const lineFilter of helper.lang.lineFilters ?? []) {
-      lineGenerator = lineFilter({ lines: lineGenerator, fullStop });
-    }
-
-    lineGenerator = stopAtSimilarLine(
-      lineGenerator,
-      this.getLineBelowCursor(helper),
-      fullStop,
-    );
-
-    const timeoutValue = helper.options.modelTimeout;
-
-    lineGenerator = showWhateverWeHaveAtXMs(lineGenerator, timeoutValue!);
-
-    const finalGenerator = streamWithNewLines(lineGenerator);
-    for await (const update of finalGenerator) {
-      yield update;
-    }
-  }
-
-  private getLineBelowCursor(helper: HelperVars): string {
-    let lineBelowCursor = "";
-    let i = 1;
-    while (
-      lineBelowCursor.trim() === "" &&
-      helper.pos.line + i <= helper.fileLines.length - 1
-    ) {
-      lineBelowCursor =
-        helper.fileLines[
-          Math.min(helper.pos.line + i, helper.fileLines.length - 1)
-        ];
-      i++;
-    }
-    return lineBelowCursor;
   }
 }

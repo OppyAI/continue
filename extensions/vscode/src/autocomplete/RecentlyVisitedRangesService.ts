@@ -19,7 +19,7 @@ export class RecentlyVisitedRangesService {
   private numSurroundingLines = 20;
   private maxRecentFiles = 3;
   private maxSnippetsPerFile = 3;
-  private isEnabled = true;
+  private isEnabled = false;
 
   constructor(private readonly ide: IDE) {
     this.cache = new LRUCache<
@@ -96,7 +96,7 @@ export class RecentlyVisitedRangesService {
    */
   public getSnippets(): AutocompleteCodeSnippet[] {
     if (!this.isEnabled) {
-      return [];
+    return [];
     }
 
     const currentFilepath =

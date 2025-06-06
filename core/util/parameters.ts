@@ -7,7 +7,7 @@ export const DEFAULT_AUTOCOMPLETE_OPTS: TabAutocompleteOptions = {
   maxSuffixPercentage: 0.2,
   debounceDelay: 350,
   modelTimeout: 150,
-  multilineCompletions: "auto",
+  multilineCompletions: "always",
   // @deprecated TO BE REMOVED
   slidingWindowPrefixPercentage: 0.75,
   // @deprecated TO BE REMOVED
@@ -17,7 +17,7 @@ export const DEFAULT_AUTOCOMPLETE_OPTS: TabAutocompleteOptions = {
   useRecentlyEdited: true,
   disableInFiles: undefined,
   useImports: true,
-  transform: true,
+  transform: false,
   showWhateverWeHaveAtXMs: 300,
   experimental_includeClipboard: true,
   experimental_includeRecentlyVisitedRanges: true,

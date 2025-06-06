@@ -3,12 +3,9 @@ import { findUriInDirs } from "../../util/uri";
 import { ContextRetrievalService } from "../context/ContextRetrievalService";
 import { GetLspDefinitionsFunction } from "../types";
 import { HelperVars } from "../util/HelperVars";
-import { getDiffsFromCache } from "./gitDiffCache";
 
 import {
-  AutocompleteClipboardSnippet,
   AutocompleteCodeSnippet,
-  AutocompleteDiffSnippet,
   AutocompleteSnippetType,
 } from "./types";
 
@@ -20,8 +17,6 @@ export interface SnippetPayload {
   ideSnippets: AutocompleteCodeSnippet[];
   recentlyEditedRangeSnippets: AutocompleteCodeSnippet[];
   recentlyVisitedRangesSnippets: AutocompleteCodeSnippet[];
-  diffSnippets: AutocompleteDiffSnippet[];
-  clipboardSnippets: AutocompleteClipboardSnippet[];
 }
 
 function racePromise<T>(promise: Promise<T[]>, timeout = 100): Promise<T[]> {
@@ -76,33 +71,6 @@ function getSnippetsFromRecentlyEditedRanges(
   });
 }
 
-const getClipboardSnippets = async (
-  ide: IDE,
-): Promise<AutocompleteClipboardSnippet[]> => {
-  const content = await ide.getClipboardContent();
-
-  return [content].map((item) => {
-    return {
-      content: item.text,
-      copiedAt: item.copiedAt,
-      type: AutocompleteSnippetType.Clipboard,
-    };
-  });
-};
-
-const getDiffSnippets = async (
-  ide: IDE,
-): Promise<AutocompleteDiffSnippet[]> => {
-  const diffs = await getDiffsFromCache(ide);
-
-  return diffs.map((item) => {
-    return {
-      content: item,
-      type: AutocompleteSnippetType.Diff,
-    };
-  });
-};
-
 export const getAllSnippets = async ({
   helper,
   ide,
@@ -120,9 +88,7 @@ export const getAllSnippets = async ({
   const [
     rootPathSnippets,
     importDefinitionSnippets,
-    ideSnippets,
-    diffSnippets,
-    clipboardSnippets,
+    ideSnippets
   ] = await Promise.all([
     racePromise(contextRetrievalService.getRootPathSnippets(helper)),
     racePromise(
@@ -131,8 +97,6 @@ export const getAllSnippets = async ({
     IDE_SNIPPETS_ENABLED
       ? racePromise(getIdeSnippets(helper, ide, getDefinitionsFromLsp))
       : [],
-    [], // racePromise(getDiffSnippets(ide)) // temporarily disabled, see https://github.com/continuedev/continue/pull/5882,
-    racePromise(getClipboardSnippets(ide)),
   ]);
 
   return {
@@ -140,8 +104,6 @@ export const getAllSnippets = async ({
     importDefinitionSnippets,
     ideSnippets,
     recentlyEditedRangeSnippets,
-    diffSnippets,
-    clipboardSnippets,
-    recentlyVisitedRangesSnippets: helper.input.recentlyVisitedRanges,
+    recentlyVisitedRangesSnippets: [], // Removed recently visited ranges
   };
 };

@@ -7,7 +7,6 @@ import {
 import { ConfigHandler } from "core/config/ConfigHandler";
 import { IS_NEXT_EDIT_ACTIVE } from "core/nextEdit/constants";
 import { NextEditProvider } from "core/nextEdit/NextEditProvider";
-import * as URI from "uri-js";
 import { v4 as uuidv4 } from "uuid";
 import * as vscode from "vscode";
 
@@ -143,64 +142,26 @@ export class ContinueCompletionProvider
       const signal = abortController.signal;
       token.onCancellationRequested(() => abortController.abort());
 
-      // Handle notebook cells
+      // Handle commit message input box
+      let manuallyPassPrefix: string | undefined = undefined;
+
+      // Only use the current file's context: do not include notebook, untitled, or other file context
       const pos = {
         line: position.line,
         character: position.character,
       };
-      let manuallyPassFileContents: string | undefined = undefined;
-      if (document.uri.scheme === "vscode-notebook-cell") {
-        const notebook = vscode.workspace.notebookDocuments.find((notebook) =>
-          notebook
-            .getCells()
-            .some((cell) =>
-              URI.equal(cell.document.uri.toString(), document.uri.toString()),
-            ),
-        );
-        if (notebook) {
-          const cells = notebook.getCells();
-          manuallyPassFileContents = cells
-            .map((cell) => {
-              const text = cell.document.getText();
-              if (cell.kind === vscode.NotebookCellKind.Markup) {
-                return `"""${text}"""`;
-              } else {
-                return text;
-              }
-            })
-            .join("\n\n");
-          for (const cell of cells) {
-            if (
-              URI.equal(cell.document.uri.toString(), document.uri.toString())
-            ) {
-              break;
-            } else {
-              pos.line += cell.document.getText().split("\n").length + 1;
-            }
-          }
-        }
-      }
-
-      // Manually pass file contents for unsaved, untitled files
-      if (document.isUntitled) {
-        manuallyPassFileContents = document.getText();
-      }
-
-      // Handle commit message input box
-      let manuallyPassPrefix: string | undefined = undefined;
 
       const input: AutocompleteInput = {
         pos,
-        manuallyPassFileContents,
-        manuallyPassPrefix,
+        manuallyPassFileContents: undefined,
+        manuallyPassPrefix: undefined,
         selectedCompletionInfo,
         injectDetails,
         isUntitledFile: document.isUntitled,
         completionId: uuidv4(),
         filepath: document.uri.toString(),
-        recentlyVisitedRanges: this.recentlyVisitedRanges.getSnippets(),
-        recentlyEditedRanges:
-          await this.recentlyEditedTracker.getRecentlyEditedRanges(),
+        recentlyVisitedRanges: [],
+        recentlyEditedRanges: [],
       };
 
       setupStatusBar(undefined, true);
@@ -256,13 +217,19 @@ export class ContinueCompletionProvider
 
       // Mark displayed
       this.completionProvider.markDisplayed(input.completionId, outcome);
-      this._lastShownCompletion = outcome;
-
-      // Construct the range/text to show
+      this._lastShownCompletion = outcome;      // Construct the range/text to show
       const startPos = selectedCompletionInfo?.range.start ?? position;
       let range = new vscode.Range(startPos, startPos);
-      let completionText = outcome.completion;
-      const isSingleLineCompletion = outcome.completion.split("\n").length <= 1;
+      let completionText = extractCodeFromMarkdownBlock(outcome.completion);
+      
+      // Get the current line and calculate base indentation
+      const currentLine = document.lineAt(startPos.line);
+      const currentLineText = currentLine.text;
+      const baseIndentation = currentLineText.substring(0, startPos.character);
+      
+      console.log("Context")
+      console.log(completionText)
+      const isSingleLineCompletion = completionText.split("\n").length <= 1;
 
       if (isSingleLineCompletion) {
         const lastLineOfCompletionText = completionText.split("\n").pop() || "";
@@ -278,9 +245,7 @@ export class ContinueCompletionProvider
 
         if (result === undefined) {
           return undefined;
-        }
-
-        completionText = result.completionText;
+        }        completionText = result.completionText;
         if (result.range) {
           range = new vscode.Range(
             new vscode.Position(startPos.line, result.range.start),
@@ -288,10 +253,51 @@ export class ContinueCompletionProvider
           );
         }
       } else {
+        // Handle multi-line completions with proper indentation
+        const lines = completionText.split("\n");
+        
+        if (lines.length > 1) {
+          // Calculate the indentation of the first line
+          const firstLine = lines[0];
+          const firstLineIndentation = firstLine.match(/^\s*/)?.[0] || "";
+          
+          // For multi-line completions, we need to align the first line to cursor
+          // and indent subsequent lines relative to the first line and cursor
+          const indentedLines = lines.map((line, index) => {
+            if (index === 0) {
+              // First line: remove its original indentation and use cursor position
+              const firstLineContent = firstLine.substring(firstLineIndentation.length);
+              return firstLineContent;
+            } else {
+              // For subsequent lines, preserve relative indentation from first line
+              if (line.trim() === "") {
+                // Keep empty lines empty
+                return "";
+              } else {
+                // Calculate relative indentation compared to first line
+                const lineIndentation = line.match(/^\s*/)?.[0] || "";
+                const lineContent = line.substring(lineIndentation.length);
+                
+                // Calculate the relative indent (how much more/less than first line)
+                const relativeIndent = lineIndentation.length - firstLineIndentation.length;
+                
+                // Apply base indentation + first line indentation + relative indentation
+                const totalIndentSpaces = Math.max(0, baseIndentation.length + relativeIndent);
+                const totalIndent = " ".repeat(totalIndentSpaces);
+                
+                return totalIndent + lineContent;
+              }
+            }
+          });
+          
+          completionText = indentedLines.join("\n");
+        }
+        
         // Extend the range to the end of the line for multiline completions
         range = new vscode.Range(startPos, document.lineAt(startPos).range.end);
       }
-
+      console.log("Multi line")
+      console.log(completionText)
       const completionItem = new vscode.InlineCompletionItem(
         completionText,
         range,
@@ -332,4 +338,20 @@ export class ContinueCompletionProvider
 
     return true;
   }
+}
+function extractCodeFromMarkdownBlock(text: string): string {
+  // Try to match a complete code block first
+  const completeMatch = text.match(/```(?:\w*\n)?([\s\S]*?)```/);
+  if (completeMatch) {
+    return completeMatch[1];
+  }
+
+  // If there's an unclosed code block, extract everything after the opening ```
+  const unclosedMatch = text.match(/```(?:\w*\n)?([\s\S]*)$/);
+  if (unclosedMatch) {
+    return unclosedMatch[1];
+  }
+
+  // No code block found, return original text
+  return text;
 }

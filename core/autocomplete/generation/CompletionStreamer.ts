@@ -3,7 +3,6 @@ import { StreamTransformPipeline } from "../filtering/streamTransforms/StreamTra
 import { HelperVars } from "../util/HelperVars";
 
 import { GeneratorReuseManager } from "./GeneratorReuseManager";
-import { stopAfterMaxProcessingTime } from "./utils";
 
 export class CompletionStreamer {
   private streamTransformPipeline = new StreamTransformPipeline();
@@ -37,21 +36,10 @@ export class CompletionStreamer {
               ...completionOptions,
               raw: true,
             });
-
-        /**
-         * This transformer applies even on reused generator. We are deliberately
-         * not using streamTransformPipeline because we want to capture and stop
-         * the request even if the generator is being reused.
-         */
-        return helper.options.transform
-          ? stopAfterMaxProcessingTime(
-              generator,
-              helper.options.modelTimeout * 2.5,
-              fullStop,
-            )
-          : generator;
+        // Remove all other stopping logic: always use the transform pipeline
+        return generator;
       },
-      multiline,
+      true,
     );
 
     // LLM
@@ -65,17 +53,16 @@ export class CompletionStreamer {
     };
 
     const initialGenerator = generatorWithCancellation();
-    const transformedGenerator = helper.options.transform
-      ? this.streamTransformPipeline.transform(
-          initialGenerator,
-          prefix,
-          suffix,
-          multiline,
-          completionOptions?.stop || [],
-          fullStop,
-          helper,
-        )
-      : initialGenerator;
+    // Always use the transform pipeline, regardless of helper.options.transform
+    const transformedGenerator = this.streamTransformPipeline.transform(
+      initialGenerator,
+      prefix,
+      suffix,
+      multiline,
+      [], // Ignore stop tokens
+      fullStop,
+      helper,
+    );
 
     for await (const update of transformedGenerator) {
       yield update;

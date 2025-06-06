@@ -8,11 +8,11 @@ const SRC_DIRECTORY = "/src/";
 // Starcoder2 tends to output artifacts starting with the letter "t"
 const STARCODER2_T_ARTIFACTS = ["t.", "\nt", "<file_sep>"];
 const PYTHON_ENCODING = "#- coding: utf-8";
-const CODE_BLOCK_END = "```";
+// const CODE_BLOCK_END = "```";
 
 // const multilineStops: string[] = [DOUBLE_NEWLINE, WINDOWS_DOUBLE_NEWLINE];
-const commonStops = [SRC_DIRECTORY, PYTHON_ENCODING, CODE_BLOCK_END];
-
+// const commonStops = [SRC_DIRECTORY, PYTHON_ENCODING, CODE_BLOCK_END];
+const commonStops = [SRC_DIRECTORY, PYTHON_ENCODING]
 export function getStopTokens(
   completionOptions: Partial<CompletionOptions> | undefined,
   lang: AutocompleteLanguageInfo,

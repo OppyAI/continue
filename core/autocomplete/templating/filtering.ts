@@ -43,10 +43,7 @@ export const getSnippets = (
   payload: SnippetPayload,
 ): AutocompleteSnippet[] => {
   const snippets = {
-    clipboard: payload.clipboardSnippets,
-    recentlyVisitedRanges: payload.recentlyVisitedRangesSnippets,
     recentlyEditedRanges: payload.recentlyEditedRangeSnippets,
-    diff: payload.diffSnippets,
     base: shuffleArray(
       filterSnippetsAlreadyInCaretWindow(
         [...payload.rootPathSnippets, ...payload.importDefinitionSnippets],
@@ -55,7 +52,7 @@ export const getSnippets = (
     ),
   };
 
-  // Define snippets with their priorities
+  // Only allow base and recentlyEditedRanges
   const snippetConfigs: {
     key: keyof typeof snippets;
     enabledOrPriority: boolean | number;
@@ -63,34 +60,10 @@ export const getSnippets = (
     snippets: AutocompleteSnippet[];
   }[] = [
     {
-      key: "clipboard",
-      enabledOrPriority: helper.options.experimental_includeClipboard,
-      defaultPriority: 1,
-      snippets: payload.clipboardSnippets,
-    },
-    {
-      key: "recentlyVisitedRanges",
-      enabledOrPriority:
-        helper.options.experimental_includeRecentlyVisitedRanges,
-      defaultPriority: 2,
-      snippets: payload.recentlyVisitedRangesSnippets,
-      /* TODO: recentlyVisitedRanges also contain contents from other windows like terminal or output
-      if they are visible. We should handle them separately so that we can control their priority
-      and whether they should be included or not. */
-    },
-    {
       key: "recentlyEditedRanges",
-      enabledOrPriority:
-        helper.options.experimental_includeRecentlyEditedRanges,
-      defaultPriority: 3,
+      enabledOrPriority: helper.options.experimental_includeRecentlyEditedRanges,
+      defaultPriority: 1,
       snippets: payload.recentlyEditedRangeSnippets,
-    },
-    {
-      key: "diff",
-      enabledOrPriority: helper.options.experimental_includeDiff,
-      defaultPriority: 4,
-      snippets: payload.diffSnippets,
-      // TODO: diff is commonly too large, thus anything lower in priority is not included.
     },
     {
       key: "base",
@@ -102,8 +75,6 @@ export const getSnippets = (
           helper.prunedCaretWindow,
         ),
       ),
-      // TODO: Add this too to experimental config, maybe move upper in the order, since it's almost
-      // always not inlucded due to diff being commonly large
     },
   ];
 

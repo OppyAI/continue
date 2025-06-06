@@ -4,13 +4,13 @@ import { CompletionOptions } from "../..";
 import { AutocompleteLanguageInfo } from "../constants/AutocompleteLanguageInfo";
 import { HelperVars } from "../util/HelperVars";
 
+import { getUriPathBasename } from "../../util/uri";
 import { SnippetPayload } from "../snippets";
 import {
   AutocompleteTemplate,
   getTemplateForModel,
 } from "./AutocompleteTemplate";
 import { getSnippets } from "./filtering";
-import { getUriPathBasename } from "../../util/uri";
 import { formatSnippets } from "./formatting";
 import { getStopTokens } from "./getStopTokens";
 
@@ -73,6 +73,16 @@ export function renderPrompt({
 
   const snippets = getSnippets(helper, snippetPayload);
 
+  // Filter snippets to only include those from the current file
+  const filteredSnippets = snippets.filter((snippet) => {
+    // Only include code snippets from the current file
+    if (snippet.type === "code" && (snippet as any).filepath) {
+      return (snippet as any).filepath === helper.filepath;
+    }
+    // Optionally, you can allow clipboard/diff snippets if desired, or exclude them:
+    return false;
+  });
+
   // Some models have prompts that need two passes. This lets us pass the compiled prefix/suffix
   // into either the 2nd template to generate a raw string, or to pass prefix, suffix to a FIM endpoint
   if (compilePrefixSuffix) {
@@ -81,11 +91,11 @@ export function renderPrompt({
       suffix,
       helper.filepath,
       reponame,
-      snippets,
+      filteredSnippets,
       helper.workspaceUris,
     );
   } else {
-    const formattedSnippets = formatSnippets(helper, snippets, workspaceDirs);
+    const formattedSnippets = formatSnippets(helper, filteredSnippets, workspaceDirs);
     prefix = [formattedSnippets, prefix].join("\n");
   }
 
